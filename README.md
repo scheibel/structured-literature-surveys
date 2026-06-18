@@ -22,6 +22,35 @@ Outputs are written to:
 
 The script does not download PDFs.
 
+## PDF Follow-Up Workflow
+
+After a search run, list candidates that still need a local PDF:
+
+```bash
+python3 scripts/sls pdfs missing \
+  --run-dir searches/2026-06-19_temporal-treemap \
+  --output searches/2026-06-19_temporal-treemap/missing_pdfs.csv
+```
+
+The report includes candidate metadata and the canonical publisher URL. The researcher can use that URL to assess access and obtain the PDF through valid routes.
+
+After placing or downloading a PDF through valid access, register it one candidate at a time:
+
+```bash
+python3 scripts/sls pdfs add \
+  --candidate-id firat2020treemapliteracyclassroom \
+  --pdf ~/Downloads/paper.pdf \
+  --refresh-run searches/2026-06-19_temporal-treemap
+```
+
+By default, the file is copied to `library/pdfs/<candidate-id>.pdf`, checksummed, and recorded in `library/manifests/pdfs.csv`. Use `--no-copy` to reference a PDF in place.
+
+To refresh an existing run after manually placing files in `library/pdfs/` with candidate-id filenames:
+
+```bash
+python3 scripts/sls pdfs refresh searches/2026-06-19_temporal-treemap
+```
+
 ## Tests
 
 ```bash

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -13,6 +12,7 @@ from urllib.request import Request, urlopen
 from .bibtex import parse_bibtex_keys, record_to_bibtex
 from .files import read_csv, write_csv, write_json, write_text
 from .identity import assign_candidate_ids, dedupe_key, normalize_doi
+from .pdfs import ensure_pdf_store, reconcile_candidate_pdfs
 from .query import QueryTranslation, translate_for_eg
 
 
@@ -154,7 +154,7 @@ def run_eg_search(
 
     candidates = deduplicate(source_records)
     assign_candidate_ids(candidates)
-    reconcile_pdfs(candidates)
+    reconcile_candidate_pdfs(candidates)
     bibtex_entries = update_bibtex(candidates, run_dir)
     for candidate in candidates:
         candidate["has_bibtex"] = "yes" if candidate.get("bibtex_key") in bibtex_entries else "no"
@@ -208,20 +208,8 @@ def prepare_directories(
 
 
 def ensure_library_dirs() -> None:
-    for path in [
-        Path("library/pdfs"),
-        Path("library/bibtex"),
-        Path("library/manifests"),
-    ]:
-        path.mkdir(parents=True, exist_ok=True)
-
-    pdf_manifest = Path("library/manifests/pdfs.csv")
-    if not pdf_manifest.exists():
-        write_csv(
-            pdf_manifest,
-            [],
-            ["candidate_id", "pdf_path", "checksum", "file_size", "match_method", "note"],
-        )
+    Path("library/bibtex").mkdir(parents=True, exist_ok=True)
+    ensure_pdf_store()
 
 
 def write_query_files(run_dir: Path, translation: QueryTranslation) -> None:
@@ -449,42 +437,6 @@ def confidence_for_key(key: str) -> str:
     return "title_year"
 
 
-def reconcile_pdfs(candidates: list[dict[str, str]]) -> None:
-    manifest_rows = read_csv(Path("library/manifests/pdfs.csv"))
-    by_candidate = {row.get("candidate_id", ""): row for row in manifest_rows}
-    pdf_files = {path.stem: path for path in Path("library/pdfs").glob("*.pdf")}
-
-    changed = False
-    for candidate in candidates:
-        cid = candidate["candidate_id"]
-        row = by_candidate.get(cid)
-        if row and row.get("pdf_path") and Path(row["pdf_path"]).exists():
-            candidate["has_local_pdf"] = "yes"
-            candidate["pdf_path"] = row["pdf_path"]
-            continue
-        if cid in pdf_files:
-            path = pdf_files[cid]
-            checksum = sha256_file(path)
-            by_candidate[cid] = {
-                "candidate_id": cid,
-                "pdf_path": str(path),
-                "checksum": checksum,
-                "file_size": str(path.stat().st_size),
-                "match_method": "filename_candidate_id",
-                "note": "",
-            }
-            candidate["has_local_pdf"] = "yes"
-            candidate["pdf_path"] = str(path)
-            changed = True
-
-    if changed:
-        write_csv(
-            Path("library/manifests/pdfs.csv"),
-            by_candidate.values(),
-            ["candidate_id", "pdf_path", "checksum", "file_size", "match_method", "note"],
-        )
-
-
 def update_bibtex(candidates: list[dict[str, str]], run_dir: Path) -> set[str]:
     bib_path = Path("library/bibtex/candidates.bib")
     existing = bib_path.read_text(encoding="utf-8") if bib_path.exists() else ""
@@ -617,10 +569,3 @@ def git_revision() -> str:
     except Exception:
         return "unknown"
 
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
