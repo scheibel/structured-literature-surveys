@@ -43,7 +43,7 @@ For one literature-search iteration, the intended process is:
 8. Refresh the run and regenerate the missing-PDF report.
 9. Stop when validation is acceptable and the remaining manual actions are understood.
 
-The current spike supports this end to end for the EG Digital Library, supports Springer Nature through its key-required metadata API, and supports ACM Digital Library through a human-executed BibTeX/RIS export.
+The current spike supports this end to end for the EG Digital Library and DBLP, supports Springer Nature through its key-required metadata API, and supports ACM Digital Library through a human-executed BibTeX/RIS export.
 
 ## End-to-End Workflow
 
@@ -329,11 +329,55 @@ Springer CSV exports are mapped from `Item Title`, `Publication Title`, `Book Se
 
 SpringerLink CSV exports may be capped. If `validation_report.md` shows a source-reported count above the imported count, and exactly `1000` records were imported, treat the run as partial. Prefer the Springer API for complete pagination, or partition the browser search into smaller ranges such as publication years, content type, or other documented filters, then import each partition as a separate run.
 
+## DBLP API Workflow
+
+Use this workflow for DBLP metadata discovery. The connector uses DBLP's official publication search API and does not scrape DBLP HTML pages.
+
+```bash
+python3 scripts/sls dblp-search \
+  --query "('temporal' OR 'dynamic' OR 'animated') AND 'treemap'" \
+  --slug temporal-treemap-dblp
+```
+
+The query translator maps the generic Boolean query to DBLP's lightweight search syntax:
+
+```text
+(temporal|dynamic|animated) treemap
+```
+
+DBLP treats whitespace as AND, `|` as OR, and uses prefix matching by default. Phrase search and boolean NOT are not preserved; those semantic losses are recorded in `sources/dblp/query_semantics.md`.
+
+Useful options:
+
+```bash
+python3 scripts/sls dblp-search \
+  --query "..." \
+  --slug temporal-treemap-dblp \
+  --max-results 25 \
+  --page-size 25
+```
+
+DBLP documents a 1,000-result cap for search. For broad survey queries, inspect `validation_report.md`; if the run reaches the cap, partition the search into narrower, documented queries and keep each partition as its own search run.
+
+When the command runs, it writes:
+
+| File | What it contains |
+|---|---|
+| `query.md` | Generic query, DBLP translated query, publication API URL, and manual DBLP URL |
+| `run_config.json` | Endpoint, query, page size, result cap, code version, and tool metadata |
+| `sources/dblp/query_semantics.md` | Translation notes and DBLP search limitations |
+| `sources/dblp/source_manifest.json` | API URLs used, result counts, cap metadata, and connector status |
+| `sources/dblp/raw/page_NNNN.json` | Raw DBLP API responses |
+| `sources/dblp/dblp_results.csv` | Normalized DBLP records before deduplication |
+| `merged_candidates.csv` | Deduplicated candidate list |
+| `validation_report.md` | Count comparison, missing-field summary, and DBLP cap notes |
+
 ## Currently Supported Sources
 
 | Source | Mode | What is required |
 |---|---|---|
 | EG Digital Library (Eurographics) | Automated via DSpace REST API | Nothing — public API |
+| DBLP | Automated via publication search API | Nothing — public API; broad queries may need partitioning because DBLP caps search results at 1,000 |
 | ACM Digital Library | Manual BibTeX/RIS export ingest | Open in browser, search, export citation file, then run `acm-import` |
 | Springer Nature / SpringerLink | API via Springer metadata endpoint, or manual CSV/BibTeX/RIS export ingest | Springer API key in `SPRINGER_API_KEY`, or browser export |
 | IEEE Xplore | API (not yet implemented) | API key |
@@ -344,7 +388,7 @@ SpringerLink CSV exports may be capped. If `validation_report.md` shows a source
 
 For sources that require a manual export: prepare the run first to get the translated query and source instructions, execute the search in your browser, export using the library's own export controls, and import the raw export with the matching source command when available.
 
-For the current spike, another researcher can execute EG automatically, Springer automatically with a configured key, Springer through the manual-export workflow, or ACM through the manual-export workflow. Other sources remain documented requirements only.
+For the current spike, another researcher can execute EG and DBLP automatically, Springer automatically with a configured key, Springer through the manual-export workflow, or ACM through the manual-export workflow. Other sources remain documented requirements only.
 
 ## Rerunning or Resuming a Search
 
@@ -363,6 +407,8 @@ Raw source exports (`sources/eg/raw/`) are always treated as immutable records o
 For ACM imports, raw export files under `sources/acm/raw/` are also immutable. Re-importing the same run with a different raw export requires a new filename, so the run preserves what was actually supplied.
 
 For Springer API runs, raw JSON pages under `sources/springer/raw/` are derived from the request and have API-key fields redacted before persistence. Use `--overwrite-derived` only when you intentionally want to regenerate derived artifacts for the same run.
+
+For DBLP API runs, raw JSON pages under `sources/dblp/raw/` are derived from the request and may be regenerated with `--overwrite-derived`. Keep the run manifest and validation report with the resulting candidate set so the 1,000-result cap and exact query are auditable.
 
 ## Project-Level Library
 
@@ -398,6 +444,9 @@ Compare `sources/acm/source_manifest.json`, the browser result count you recorde
 
 **An ACM raw export already exists.**
 Raw exports are immutable. Use a new export filename or create a new run directory rather than overwriting `sources/acm/raw/<filename>`.
+
+**A DBLP run imports exactly 1,000 records.**
+Treat the query as potentially capped. Partition the DBLP search into smaller documented queries, such as by year range or narrower topic terms, and keep each partition's run directory.
 
 ## Tests
 

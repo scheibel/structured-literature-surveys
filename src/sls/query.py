@@ -204,6 +204,89 @@ def translate_for_springer(generic_query: str) -> QueryTranslation:
     )
 
 
+def translate_for_dblp(generic_query: str) -> QueryTranslation:
+    """Translate the generic Boolean query syntax to DBLP publication search.
+
+    DBLP's search language is intentionally lightweight: whitespace expresses
+    conjunction and `|` expresses disjunction. Phrase search and boolean NOT are
+    not reliable enough for an automated equivalence claim, so the translator
+    records those losses explicitly.
+    """
+
+    notes: list[str] = [
+        "DBLP connector uses the official publication search API at https://dblp.org/search/publ/api.",
+        "DBLP search treats whitespace-separated terms as boolean AND and pipe-separated terms as boolean OR.",
+        "DBLP performs case-insensitive prefix matching by default; exact-word matching requires DBLP's `$` suffix and is not inferred by this translator.",
+        "DBLP currently documents phrase search and boolean NOT as disabled or degraded, so those generic constructs are not semantically preserved.",
+        "DBLP search results are capped at 1000 hits; broad queries should be partitioned manually.",
+    ]
+    query = generic_query.strip()
+
+    if not query:
+        raise ValueError("query must not be empty")
+
+    if query.count("(") != query.count(")"):
+        notes.append("Warning: parentheses are not balanced; DBLP request will still be prepared.")
+
+    tokens = tokenize_generic_query(query)
+    translated_parts: list[str] = []
+    saw_single_quotes = False
+    saw_phrase = False
+    saw_not = False
+    saw_operator = False
+    skip_next = False
+
+    for kind, value in tokens:
+        if kind == "operator":
+            operator = value.upper()
+            saw_operator = True
+            if operator == "AND":
+                translated_parts.append(" ")
+            elif operator == "OR":
+                translated_parts.append("|")
+            elif operator == "NOT":
+                saw_not = True
+                skip_next = True
+        elif kind == "paren":
+            translated_parts.append(value)
+        elif kind == "term":
+            if skip_next:
+                skip_next = False
+                continue
+            translated_parts.append(dblp_search_term(value))
+        elif kind == "quoted":
+            quote, content = value[0], value[1:]
+            if quote == "'":
+                saw_single_quotes = True
+            normalized = " ".join(content.strip().split())
+            if " " in normalized:
+                saw_phrase = True
+            if skip_next:
+                skip_next = False
+                continue
+            translated_parts.append(dblp_search_term(normalized))
+
+    translated = compact_dblp_query("".join(translated_parts))
+
+    if saw_single_quotes:
+        notes.append("Single-quoted generic terms were normalized to DBLP search terms.")
+    if saw_phrase:
+        notes.append("Quoted phrases were split into DBLP whitespace-conjoined terms because DBLP phrase search is documented as disabled.")
+    if saw_operator:
+        notes.append("Generic AND was translated to whitespace and OR to `|`, matching DBLP's documented search operators.")
+    if saw_not:
+        notes.append("Generic NOT terms were omitted because DBLP documents boolean NOT as disabled/degraded.")
+    if "~" in query:
+        notes.append("Potentially unsupported construct detected: proximity/fuzzy marker '~'.")
+
+    return QueryTranslation(
+        generic_query=generic_query,
+        source="dblp",
+        translated_query=translated,
+        semantics_notes=notes,
+    )
+
+
 def tokenize_generic_query(query: str) -> list[tuple[str, str]]:
     tokens: list[tuple[str, str]] = []
     index = 0
@@ -242,7 +325,18 @@ def springer_keyword_clause(value: str) -> str:
     return f'keyword:"{value}"'
 
 
+def dblp_search_term(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip())
+
+
 def compact_boolean_query(query: str) -> str:
     query = re.sub(r"\s+", " ", query).strip()
     query = query.replace("( ", "(").replace(" )", ")")
+    return query
+
+
+def compact_dblp_query(query: str) -> str:
+    query = re.sub(r"\s+", " ", query).strip()
+    query = query.replace("( ", "(").replace(" )", ")")
+    query = query.replace(" |", "|").replace("| ", "|")
     return query

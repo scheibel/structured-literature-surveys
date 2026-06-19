@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from .acm import import_acm_export, prepare_acm_search
+from .dblp import run_dblp_search
 from .eg import run_eg_search
 from .pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
 from .springer import import_springer_export, prepare_springer_manual_search, run_springer_search
@@ -230,6 +231,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create the run skeleton and query reports without contacting Springer.",
     )
 
+    dblp = subparsers.add_parser(
+        "dblp-search",
+        help="Run the DBLP publication search API workflow.",
+    )
+    dblp.add_argument(
+        "--query",
+        required=True,
+        help="Generic Boolean query, e.g. \"('temporal' OR 'dynamic') AND 'treemap'\".",
+    )
+    dblp.add_argument(
+        "--slug",
+        help="Human-readable search slug. Defaults to a slug derived from the query.",
+    )
+    dblp.add_argument(
+        "--date",
+        help="Run date in YYYY-MM-DD form. Defaults to today's local date.",
+    )
+    dblp.add_argument(
+        "--max-results",
+        type=int,
+        help="Maximum records to import. Defaults to DBLP's documented 1000-result cap.",
+    )
+    dblp.add_argument(
+        "--page-size",
+        type=int,
+        default=100,
+        help="DBLP API page size. Defaults to 100; DBLP caps per-request hits at 1000.",
+    )
+    dblp.add_argument(
+        "--overwrite-derived",
+        action="store_true",
+        help="Allow regenerating derived artifacts in an existing run directory.",
+    )
+    dblp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Create the run skeleton and query reports without contacting DBLP.",
+    )
+
     pdfs = subparsers.add_parser(
         "pdfs",
         help="Manage validly obtained local PDFs and missing-PDF reports.",
@@ -367,6 +407,23 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             api_key_env=args.api_key_env,
             endpoint=args.endpoint,
+        )
+        print(f"run_dir={result.run_dir}")
+        print(f"status={result.status}")
+        print(f"source_reported_count={result.source_reported_count}")
+        print(f"imported_count={result.imported_count}")
+        print(f"deduplicated_count={result.deduplicated_count}")
+        return 0
+
+    if args.command == "dblp-search":
+        result = run_dblp_search(
+            generic_query=args.query,
+            slug=args.slug,
+            run_date=args.date,
+            max_results=args.max_results,
+            page_size=args.page_size,
+            overwrite_derived=args.overwrite_derived,
+            dry_run=args.dry_run,
         )
         print(f"run_dir={result.run_dir}")
         print(f"status={result.status}")

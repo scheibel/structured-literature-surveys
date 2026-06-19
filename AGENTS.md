@@ -61,7 +61,7 @@ Each search-run directory should contain source-specific results and a merged cl
 
 Per digital library, persist at minimum:
 
-- Source identifier, such as `acm`, `eg`, `ieee`, `sciencedirect`, `scopus`, `wos`, or `google_scholar_manual`.
+- Source identifier, such as `acm`, `dblp`, `eg`, `ieee`, `sciencedirect`, `scopus`, `wos`, or `google_scholar_manual`.
 - Original generic query.
 - Source-specific translated query.
 - Query semantics report describing source-specific translation choices, unsupported operators, ignored constructs, field mapping differences, wildcard/proximity limitations, and other semantic loss.
@@ -147,6 +147,7 @@ Last checked: 2026-06-19.
 | Source | Connector status for v1 | Key/access requirement | Notes |
 | --- | --- | --- | --- |
 | ACM Digital Library | Manual BibTeX/RIS export ingest implemented for the spike; no public official search API found. | No usable public no-key API quota found. | The framework prepares ACM browser-search instructions and imports researcher-obtained BibTeX/RIS exports. Direct non-browser access to an ACM search URL returned a Cloudflare JavaScript challenge. If the UI exposes RSS/feed links, treat them as auxiliary unless ACM documents complete search export behavior. HTML/feed polyfill requires explicit compliance review. |
+| DBLP Computer Science Bibliography | Official publication search API connector implemented for the spike. XML/RDF dumps and SPARQL are documented integration alternatives for later bulk or structured workflows. | No API key required for publication search API. DBLP metadata exports are licensed CC0, with ODC-BY 1.0 also available for compatibility. | Use `https://dblp.org/search/publ/api` with JSON, record exact `q`, `h`, `f`, and `c` parameters, and set `c=0` unless completions are explicitly needed. DBLP search syntax differs from the generic Boolean language: whitespace is AND, `|` is OR, prefix matching is default, exact-word matching uses `$`, and DBLP documents phrase search and boolean NOT as disabled/degraded. Search results are capped at 1,000 hits, so broad queries must be refined or partitioned and count/cap warnings must be persisted. Persist DBLP record keys and DBLP record URLs as source provenance; DOI and electronic-edition links are matching/canonical URL evidence when available. |
 | EG Digital Library / Eurographics | Use OAI-PMH first; DSpace REST only if needed. | No key required for verified public OAI-PMH endpoint. | Verified `https://diglib.eg.org/server/oai/request` and `https://diglib.eg.org/server/api`. OAI formats include `oai_dc`, `qdc`, `mods`, `marc`, `mets`, `rdf`, `xoai`, and `dim`. |
 | Springer Nature / SpringerLink | Metadata API connector and manual CSV/BibTeX/RIS export ingest implemented for the spike. | Springer API key required for API mode; no no-key API quota found. Manual browser export is acceptable when performed by the researcher through SpringerLink UI controls. | Use `SPRINGER_API_KEY` from the environment for API mode. Persist only redacted API URLs and redact API-key fields in raw JSON. If the key is missing, record `missing_credentials` or use `springer-prepare` plus `springer-import`; do not fall back to SpringerLink HTML parsing. Springer CSV author fields may require manual review because exported authors can be concatenated without separators. CSV exports may be capped at 1,000 records; validation should flag suspected export caps and the researcher should partition the search or use API pagination. |
 | IEEE Xplore | Use documented IEEE Metadata API. | API key required; no no-key quota found. | Each query requires a reviewed account/API key. Record missing keys as `missing_credentials`; do not fall back to page scraping. |
@@ -282,6 +283,13 @@ Later phases, out of current scope:
 
 - ACM Digital Library overview: `https://www.acm.org/publications/digital-library`
 - ACM reader/crawler policy reference: `https://www.acm.org/publications/policies/roles-and-responsibilities`
+- DBLP search API documentation: `https://dblp.org/faq/How+to+use+the+dblp+search+API.html`
+- DBLP search syntax documentation: `https://dblp.org/faq/1474589.html`
+- DBLP license and terms: `https://dblp.org/db/about/copyright.html`
+- DBLP XML data access and snapshots: `https://dblp.org/faq/1474681.html`
+- DBLP publication search API: `https://dblp.org/search/publ/api`
+- DBLP SPARQL endpoint: `https://sparql.dblp.org/sparql`
+- DBLP RDF schema: `https://dblp.org/rdf/docu/`
 - Eurographics Digital Library: `https://diglib.eg.org/`
 - Eurographics OAI-PMH base URL: `https://diglib.eg.org/server/oai/request`
 - Eurographics DSpace REST root: `https://diglib.eg.org/server/api`

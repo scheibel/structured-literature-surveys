@@ -8,10 +8,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from sls.bibtex import record_to_bibtex
 from sls.acm import import_acm_export, parse_acm_export, prepare_acm_search
+from sls.dblp import normalize_pages as normalize_dblp_pages
 from sls.eg import deduplicate, normalize_pages, write_validation_report
 from sls.identity import assign_candidate_ids
 from sls.pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
-from sls.query import translate_for_acm, translate_for_eg, translate_for_springer
+from sls.query import translate_for_acm, translate_for_dblp, translate_for_eg, translate_for_springer
 import sls.springer as springer
 
 
@@ -36,6 +37,67 @@ class SpikeTests(unittest.TestCase):
             '(keyword:"temporal" OR keyword:"dynamic" OR keyword:"animated") AND keyword:"treemap"',
         )
         self.assertEqual(translation.source, "springer")
+
+    def test_translate_generic_query_for_dblp(self) -> None:
+        translation = translate_for_dblp("('temporal' OR 'dynamic' OR 'animated') AND 'treemap'")
+
+        self.assertEqual(translation.translated_query, "(temporal|dynamic|animated) treemap")
+        self.assertEqual(translation.source, "dblp")
+        self.assertTrue(any("1000" in note for note in translation.semantics_notes))
+
+        without_not = translate_for_dblp("'treemap' NOT 'survey'")
+        self.assertEqual(without_not.translated_query, "treemap")
+        self.assertTrue(any("NOT terms were omitted" in note for note in without_not.semantics_notes))
+
+    def test_normalize_dblp_api_response(self) -> None:
+        page = {
+            "result": {
+                "hits": {
+                    "@total": "1",
+                    "@sent": "1",
+                    "@first": "0",
+                    "hit": [
+                        {
+                            "@id": "1617109",
+                            "info": {
+                                "authors": {
+                                    "author": [
+                                        {"@pid": "198/9374", "text": "Chang Han"},
+                                        {"@pid": "153/7495", "text": "Jaemin Jo"},
+                                    ]
+                                },
+                                "title": "SizePairs: Achieving Stable and Balanced Temporal Treemaps using Hierarchical Size-based Pairing.",
+                                "venue": "IEEE Trans. Vis. Comput. Graph.",
+                                "volume": "29",
+                                "number": "1",
+                                "pages": "193-202",
+                                "year": "2023",
+                                "type": "Journal Articles",
+                                "key": "journals/tvcg/HanJLLDW23",
+                                "doi": "10.1109/TVCG.2022.3209450",
+                                "ee": "https://doi.org/10.1109/TVCG.2022.3209450",
+                                "url": "https://dblp.org/rec/journals/tvcg/HanJLLDW23",
+                            },
+                            "url": "URL#1617109",
+                        }
+                    ],
+                }
+            }
+        }
+
+        records = normalize_dblp_pages([page])
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["source"], "dblp")
+        self.assertEqual(records[0]["source_record_id"], "journals/tvcg/HanJLLDW23")
+        self.assertEqual(records[0]["authors"], "Chang Han; Jaemin Jo")
+        self.assertEqual(records[0]["doi"], "10.1109/tvcg.2022.3209450")
+        self.assertEqual(records[0]["canonical_url"], "https://doi.org/10.1109/TVCG.2022.3209450")
+        self.assertEqual(records[0]["source_api_url"], "https://dblp.org/rec/journals/tvcg/HanJLLDW23")
+
+        candidates = deduplicate(records)
+        assign_candidate_ids(candidates)
+        self.assertEqual(candidates[0]["candidate_id"], "han2023sizepairsachievingstable")
 
     def test_normalize_deduplicate_and_bibtex(self) -> None:
         page = {
