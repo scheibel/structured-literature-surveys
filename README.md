@@ -7,6 +7,13 @@ A repeatable, inspectable pipeline for structured literature search. It creates 
 - Python 3.10 or later (no extra packages required)
 - Git (used to stamp the code version in run metadata)
 - Run all commands from the project root directory
+- Enough disk space for raw API responses, CSV files, BibTeX, and PDFs you manually add
+
+Check the tool is available:
+
+```bash
+python3 scripts/sls --help
+```
 
 ## Concepts
 
@@ -18,6 +25,26 @@ A repeatable, inspectable pipeline for structured literature search. It creates 
 
 **Library** — project-level folders (`library/bibtex/`, `library/pdfs/`, `library/manifests/`) that accumulate across runs. BibTeX entries and PDF records are never stored only inside a dated run directory.
 
+**Raw artifact** — a file preserved as evidence of what was obtained from a source. Do not edit raw files under `sources/*/raw/`.
+
+**Derived artifact** — a file generated from raw artifacts and manifests, such as normalized CSV, merged candidates, BibTeX updates, validation reports, and missing-PDF reports. These may be regenerated.
+
+## Process Checklist
+
+For one literature-search iteration, the intended process is:
+
+1. Define the query.
+2. Run a dry run and inspect the translated query.
+3. Run the live EG search.
+4. Inspect validation and candidate outputs.
+5. Work through `manual_action_queue.csv`.
+6. For each missing PDF, use the canonical URL to assess access manually.
+7. Register validly obtained PDFs one by one.
+8. Refresh the run and regenerate the missing-PDF report.
+9. Stop when validation is acceptable and the remaining manual actions are understood.
+
+The current spike supports this end to end for the EG Digital Library only.
+
 ## End-to-End Workflow
 
 ### 1. Write your query
@@ -27,6 +54,8 @@ Queries use a small Boolean syntax: `AND`, `OR`, `NOT`, parentheses, bare terms,
 ```text
 ('temporal' OR 'dynamic' OR 'animated') AND 'treemap'
 ```
+
+Choose a short slug for the search, such as `temporal-treemap`. The slug becomes part of the dated run directory name.
 
 ### 2. Do a dry run first
 
@@ -40,6 +69,8 @@ python3 scripts/sls eg-search \
 ```
 
 Open `searches/YYYY-MM-DD_temporal-treemap/query.md` to review the translated query and the manual verification URL before committing to a live run.
+
+Also open `sources/eg/query_semantics.md`. For this spike, the query translator preserves Boolean operators and parentheses, and normalizes quoted terms for EG/DSpace search.
 
 ### 3. Run the search
 
@@ -61,6 +92,8 @@ deduplicated_count=201
 
 Use `--max-results N` to limit the import during development or testing.
 
+For a real survey run, omit `--max-results` unless you intentionally want a partial pilot. If `--max-results` is used, the validation report will show a count mismatch because EG may report more results than were imported.
+
 ### 4. Review the outputs
 
 Open the run directory. Everything needed to audit the run is there:
@@ -79,6 +112,8 @@ Open the run directory. Everything needed to audit the run is there:
 | `bibtex_update.bib` | BibTeX entries generated for this run (also merged into `library/bibtex/candidates.bib`) |
 | `missing_pdfs.csv` | Shortlist of candidates without a local PDF |
 
+Start with `validation_report.md`, then `merged_candidates.csv`, then `manual_action_queue.csv`.
+
 ### 5. Check the validation report
 
 Open `validation_report.md`. If `source_reported_count` differs from `imported_count`, the report flags it. A mismatch expected when you used `--max-results`; otherwise it may indicate a pagination issue or an export cap to investigate.
@@ -93,9 +128,17 @@ Open `manual_action_queue.csv`. Each row is one action needed for one candidate.
 | `missing_bibtex` | BibTeX could not be generated — usually means a candidate is missing authors, year, or title |
 | `review_duplicate` | Deduplication matched on title + year only (no DOI or URL available); confirm the merge is correct |
 
-### 7. Obtain and register PDFs
+### 7. Obtain and register PDFs one by one
 
-The pipeline never downloads PDFs. After obtaining a PDF through a valid access route (institutional access, open access, author copy), register it:
+The pipeline never downloads PDFs. For each `missing_local_pdf` row:
+
+1. Open the `canonical_url` from the row.
+2. Decide manually whether you have valid access.
+3. If you obtain the PDF, save it locally.
+4. Register it with the matching `candidate_id`.
+5. Refresh the run and continue with the next missing PDF.
+
+Register a validly obtained PDF:
 
 ```bash
 python3 scripts/sls pdfs add \
@@ -104,6 +147,15 @@ python3 scripts/sls pdfs add \
 ```
 
 The file is copied to `library/pdfs/<candidate-id>.pdf`, checksummed, and recorded in `library/manifests/pdfs.csv`. Use `--no-copy` to reference a PDF in its current location without copying.
+
+To register and immediately refresh the current run:
+
+```bash
+python3 scripts/sls pdfs add \
+  --candidate-id firat2020treemapliteracyclassroom \
+  --pdf ~/Downloads/paper.pdf \
+  --refresh-run searches/2026-06-19_temporal-treemap
+```
 
 To see which candidates across all runs are still missing a PDF:
 
@@ -126,6 +178,24 @@ To refresh the PDF status in a run's `merged_candidates.csv` after registering P
 python3 scripts/sls pdfs refresh searches/2026-06-19_temporal-treemap
 ```
 
+After refresh, reopen:
+
+- `merged_candidates.csv` to confirm `has_local_pdf=yes` for the registered candidate.
+- `missing_pdfs.csv` to confirm the candidate disappeared from the missing list.
+- `library/manifests/pdfs.csv` to confirm checksum and file path were recorded.
+
+### 8. Decide whether the run is ready for downstream analysis
+
+A run is ready as input to downstream analysis when:
+
+- `validation_report.md` has no unexplained count mismatch.
+- `merged_candidates.csv` contains the expected candidate set.
+- `manual_action_queue.csv` contains no unresolved issues you consider blocking.
+- `library/bibtex/candidates.bib` contains the expected BibTeX entries.
+- Missing local PDFs are either resolved or intentionally deferred.
+
+It is acceptable for some PDFs to remain missing if access is unavailable or not yet assessed. The important part is that the missing state is explicit and traceable.
+
 ## Currently Supported Sources
 
 | Source | Mode | What is required |
@@ -139,6 +209,8 @@ python3 scripts/sls pdfs refresh searches/2026-06-19_temporal-treemap
 | Google Scholar | Not automated | Manual export only; no official bulk API |
 
 For sources that require a manual export: run the pipeline with `--dry-run` first to get the translated query, execute the search in your browser, export using the library's own export controls, and place the export file in the appropriate `sources/<source>/` directory. Automated ingest of those exports is not yet implemented.
+
+For the current spike, another researcher should use only the EG automated workflow for reproducible execution.
 
 ## Rerunning or Resuming a Search
 
@@ -166,6 +238,22 @@ library/
 ```
 
 These files are the durable record of your survey. Do not store them only inside a dated run directory.
+
+Generated `searches/` and `library/` files are ignored by Git in this spike. Share them deliberately when they are part of a study package; do not assume they are committed automatically.
+
+## Troubleshooting
+
+**The run directory already exists.**
+Use a new slug/date, or pass `--overwrite-derived` when you intentionally want to regenerate derived files for the same run.
+
+**`source_reported_count` and `imported_count` differ.**
+This is expected if you used `--max-results`. Otherwise, inspect `sources/eg/source_manifest.json` and the raw pages under `sources/eg/raw/`.
+
+**A candidate still appears in `missing_pdfs.csv` after registering a PDF.**
+Run `python3 scripts/sls pdfs refresh <run-dir>`. If it still appears, check that `library/manifests/pdfs.csv` contains the same `candidate_id` as `merged_candidates.csv`.
+
+**A PDF was registered by mistake.**
+Delete the corresponding row from `library/manifests/pdfs.csv`, remove the PDF from `library/pdfs/` if it was copied there, and run `python3 scripts/sls pdfs refresh <run-dir>`.
 
 ## Tests
 
