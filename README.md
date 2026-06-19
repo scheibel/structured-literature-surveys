@@ -43,7 +43,7 @@ For one literature-search iteration, the intended process is:
 8. Refresh the run and regenerate the missing-PDF report.
 9. Stop when validation is acceptable and the remaining manual actions are understood.
 
-The current spike supports this end to end for the EG Digital Library and supports ACM Digital Library through a human-executed BibTeX/RIS export.
+The current spike supports this end to end for the EG Digital Library, supports Springer Nature through its key-required metadata API, and supports ACM Digital Library through a human-executed BibTeX/RIS export.
 
 ## End-to-End Workflow
 
@@ -241,12 +241,101 @@ The import step parses BibTeX or RIS, writes `sources/acm/acm_results.csv`, rege
 
 If ACM's visible result count differs from the imported record count, the validation report flags the mismatch. This usually means an export cap, page-only export, filter mismatch, or a manual export mistake that should be documented or corrected.
 
+## Springer Nature API Workflow
+
+Use this workflow for SpringerLink/Springer Nature metadata discovery. The connector uses the Springer Nature metadata API and does not scrape SpringerLink HTML.
+
+### 1. Configure the API key
+
+Store the API key outside project files:
+
+```bash
+export SPRINGER_API_KEY="..."
+```
+
+The key is read from the environment, used only for the request, and redacted from run manifests and raw JSON artifacts.
+
+### 2. Run or prepare the Springer search
+
+```bash
+python3 scripts/sls springer-search \
+  --query "('temporal' OR 'dynamic' OR 'animated') AND 'treemap'" \
+  --slug temporal-treemap-springer
+```
+
+The query translator maps unscoped generic terms to conservative Springer keyword constraints:
+
+```text
+(keyword:"temporal" OR keyword:"dynamic" OR keyword:"animated") AND keyword:"treemap"
+```
+
+If `SPRINGER_API_KEY` is not set, the command still creates a dated run directory and records source status `missing_credentials` in `sources/springer/source_manifest.json`. This makes the blocked state explicit without falling back to HTML parsing.
+
+Useful options:
+
+```bash
+python3 scripts/sls springer-search \
+  --query "..." \
+  --slug temporal-treemap-springer \
+  --max-results 25 \
+  --page-size 25 \
+  --api-key-env SPRINGER_API_KEY \
+  --endpoint metadata
+```
+
+### 3. Review Springer outputs
+
+When credentials are available, the command writes:
+
+| File | What it contains |
+|---|---|
+| `query.md` | Generic query, Springer translated query, redacted API URL, and manual SpringerLink URL |
+| `run_config.json` | Endpoint, query, page size, env-var name, code version, and tool metadata |
+| `sources/springer/query_semantics.md` | Translation notes and API-key handling notes |
+| `sources/springer/source_manifest.json` | Redacted API URLs, result counts, credential status, and connector status |
+| `sources/springer/raw/page_NNNN.json` | Raw API responses with API-key fields redacted |
+| `sources/springer/springer_results.csv` | Normalized Springer records before deduplication |
+| `merged_candidates.csv` | Deduplicated candidate list |
+| `validation_report.md` | Count comparison and missing-field summary |
+
+Do not paste API keys into `query.md`, `run_config.json`, or command history that will be shared.
+
+### 4. Manual SpringerLink export without an API key
+
+If you do not have a Springer API key, use the human-executed workflow:
+
+```bash
+python3 scripts/sls springer-prepare \
+  --query "('temporal' OR 'dynamic' OR 'animated') AND 'treemap'" \
+  --slug temporal-treemap-springer
+```
+
+Open the SpringerLink URL in `query.md`, verify the query and filters, record the visible result count, and export citations/search results as CSV, BibTeX, or RIS if SpringerLink offers that for the result set.
+
+Then import the unchanged export:
+
+```bash
+python3 scripts/sls springer-import \
+  --run-dir searches/YYYY-MM-DD_temporal-treemap-springer \
+  --export ~/Downloads/springer-export.csv \
+  --format auto \
+  --reported-count 42 \
+  --source-url "https://link.springer.com/search?..."
+```
+
+The import step writes `sources/springer/springer_results.csv`, copies the raw export to `sources/springer/raw/`, regenerates `merged_candidates.csv`, updates `library/bibtex/candidates.bib`, and refreshes `manual_action_queue.csv` and `validation_report.md`.
+
+Springer CSV exports are mapped from `Item Title`, `Publication Title`, `Book Series Title`, `Journal Volume`, `Journal Issue`, `Item DOI`, `Authors`, `Publication Year`, and `URL`. Springer may concatenate authors without separators; the importer applies a conservative splitting heuristic and preserves the resulting names for review.
+
+SpringerLink CSV exports may be capped. If `validation_report.md` shows a source-reported count above the imported count, and exactly `1000` records were imported, treat the run as partial. Prefer the Springer API for complete pagination, or partition the browser search into smaller ranges such as publication years, content type, or other documented filters, then import each partition as a separate run.
+
 ## Currently Supported Sources
 
 | Source | Mode | What is required |
 |---|---|---|
 | EG Digital Library (Eurographics) | Automated via DSpace REST API | Nothing — public API |
 | ACM Digital Library | Manual BibTeX/RIS export ingest | Open in browser, search, export citation file, then run `acm-import` |
+| Springer Nature / SpringerLink | API via Springer metadata endpoint, or manual CSV/BibTeX/RIS export ingest | Springer API key in `SPRINGER_API_KEY`, or browser export |
 | IEEE Xplore | API (not yet implemented) | API key |
 | ScienceDirect | API (not yet implemented) | Elsevier API key |
 | Scopus | API (not yet implemented) | Elsevier API key |
@@ -255,7 +344,7 @@ If ACM's visible result count differs from the imported record count, the valida
 
 For sources that require a manual export: prepare the run first to get the translated query and source instructions, execute the search in your browser, export using the library's own export controls, and import the raw export with the matching source command when available.
 
-For the current spike, another researcher can execute EG automatically or ACM through the manual-export workflow. Other sources remain documented requirements only.
+For the current spike, another researcher can execute EG automatically, Springer automatically with a configured key, Springer through the manual-export workflow, or ACM through the manual-export workflow. Other sources remain documented requirements only.
 
 ## Rerunning or Resuming a Search
 
@@ -272,6 +361,8 @@ python3 scripts/sls eg-search \
 Raw source exports (`sources/eg/raw/`) are always treated as immutable records of what was retrieved.
 
 For ACM imports, raw export files under `sources/acm/raw/` are also immutable. Re-importing the same run with a different raw export requires a new filename, so the run preserves what was actually supplied.
+
+For Springer API runs, raw JSON pages under `sources/springer/raw/` are derived from the request and have API-key fields redacted before persistence. Use `--overwrite-derived` only when you intentionally want to regenerate derived artifacts for the same run.
 
 ## Project-Level Library
 

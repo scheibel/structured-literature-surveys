@@ -142,12 +142,13 @@ The project should maintain small representative test fixtures for each supporte
 
 ## Source Connector Requirements
 
-Last checked: 2026-06-18.
+Last checked: 2026-06-19.
 
 | Source | Connector status for v1 | Key/access requirement | Notes |
 | --- | --- | --- | --- |
 | ACM Digital Library | Manual BibTeX/RIS export ingest implemented for the spike; no public official search API found. | No usable public no-key API quota found. | The framework prepares ACM browser-search instructions and imports researcher-obtained BibTeX/RIS exports. Direct non-browser access to an ACM search URL returned a Cloudflare JavaScript challenge. If the UI exposes RSS/feed links, treat them as auxiliary unless ACM documents complete search export behavior. HTML/feed polyfill requires explicit compliance review. |
 | EG Digital Library / Eurographics | Use OAI-PMH first; DSpace REST only if needed. | No key required for verified public OAI-PMH endpoint. | Verified `https://diglib.eg.org/server/oai/request` and `https://diglib.eg.org/server/api`. OAI formats include `oai_dc`, `qdc`, `mods`, `marc`, `mets`, `rdf`, `xoai`, and `dim`. |
+| Springer Nature / SpringerLink | Metadata API connector and manual CSV/BibTeX/RIS export ingest implemented for the spike. | Springer API key required for API mode; no no-key API quota found. Manual browser export is acceptable when performed by the researcher through SpringerLink UI controls. | Use `SPRINGER_API_KEY` from the environment for API mode. Persist only redacted API URLs and redact API-key fields in raw JSON. If the key is missing, record `missing_credentials` or use `springer-prepare` plus `springer-import`; do not fall back to SpringerLink HTML parsing. Springer CSV author fields may require manual review because exported authors can be concatenated without separators. CSV exports may be capped at 1,000 records; validation should flag suspected export caps and the researcher should partition the search or use API pagination. |
 | IEEE Xplore | Use documented IEEE Metadata API. | API key required; no no-key quota found. | Each query requires a reviewed account/API key. Record missing keys as `missing_credentials`; do not fall back to page scraping. |
 | ScienceDirect | Use Elsevier ScienceDirect APIs when configured. | Elsevier API key required; full API behavior may depend on institutional entitlements. | For metadata-driven v1, record missing key, quota, or denied request states explicitly. Avoid HTML parsing as a key workaround. |
 | Scopus | Use Elsevier Scopus APIs when configured. | Elsevier API key required; full API behavior may depend on institutional entitlements. | Scopus is an Elsevier product, not Clarivate. Keep this source separate from Web of Science. |
@@ -284,6 +285,9 @@ Later phases, out of current scope:
 - Eurographics Digital Library: `https://diglib.eg.org/`
 - Eurographics OAI-PMH base URL: `https://diglib.eg.org/server/oai/request`
 - Eurographics DSpace REST root: `https://diglib.eg.org/server/api`
+- Springer Nature Developer Portal: `https://dev.springernature.com/`
+- Springer Nature Meta API documentation: `https://dev.springernature.com/docs/api-endpoints/meta-api/`
+- Springer Nature API base URL: `https://api.springernature.com/`
 - IEEE Xplore API portal: `https://developer.ieee.org/`
 - IEEE Xplore Metadata API details: `https://developer.ieee.org/docs/read/Metadata_API_details`
 - IEEE API Query Basics: `https://developer.ieee.org/docs/read/Searching_the_IEEE_Xplore_Metadata_API`

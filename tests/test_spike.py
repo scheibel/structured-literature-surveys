@@ -8,10 +8,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from sls.bibtex import record_to_bibtex
 from sls.acm import import_acm_export, parse_acm_export, prepare_acm_search
-from sls.eg import deduplicate, normalize_pages
+from sls.eg import deduplicate, normalize_pages, write_validation_report
 from sls.identity import assign_candidate_ids
 from sls.pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
-from sls.query import translate_for_acm, translate_for_eg
+from sls.query import translate_for_acm, translate_for_eg, translate_for_springer
+import sls.springer as springer
 
 
 class SpikeTests(unittest.TestCase):
@@ -26,6 +27,15 @@ class SpikeTests(unittest.TestCase):
 
         self.assertEqual(translation.translated_query, "(temporal OR dynamic OR animated) AND treemap")
         self.assertEqual(translation.source, "acm")
+
+    def test_translate_generic_query_for_springer(self) -> None:
+        translation = translate_for_springer("('temporal' OR 'dynamic' OR 'animated') AND 'treemap'")
+
+        self.assertEqual(
+            translation.translated_query,
+            '(keyword:"temporal" OR keyword:"dynamic" OR keyword:"animated") AND keyword:"treemap"',
+        )
+        self.assertEqual(translation.source, "springer")
 
     def test_normalize_deduplicate_and_bibtex(self) -> None:
         page = {
@@ -92,6 +102,22 @@ class SpikeTests(unittest.TestCase):
         bibtex = record_to_bibtex(candidates[0])
         self.assertIn("@inproceedings{firat2020treemapliteracyclassroom,", bibtex)
         self.assertIn("doi = {10.2312/eged.20201032}", bibtex)
+
+    def test_validation_report_flags_suspected_export_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "validation_report.md"
+            write_validation_report(
+                report,
+                source_reported_count=1267,
+                imported_count=1000,
+                deduplicated_count=1000,
+                max_results=None,
+                candidates=[],
+            )
+
+            text = report.read_text(encoding="utf-8")
+            self.assertIn("Count mismatch: warning", text)
+            self.assertIn("Suspected export cap", text)
 
     def test_register_pdf_and_refresh_missing_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -267,6 +293,297 @@ ER  -
                 import os
 
                 os.chdir(old_cwd)
+
+    def test_normalize_springer_metadata_records(self) -> None:
+        page = {
+            "result": [{"total": "1", "start": "1", "pageLength": "1", "recordsDisplayed": "1"}],
+            "records": [
+                {
+                    "identifier": "doi:10.1007/978-3-030-12345-6_7",
+                    "title": "Dynamic Treemap Layouts",
+                    "creators": [{"creator": "Smith, Ada"}, {"creator": "Doe, Ben"}],
+                    "publicationDate": "2024-05-01",
+                    "doi": "10.1007/978-3-030-12345-6_7",
+                    "url": [
+                        {
+                            "format": "html",
+                            "platform": "springer",
+                            "value": "https://link.springer.com/chapter/10.1007/978-3-030-12345-6_7",
+                        }
+                    ],
+                    "publicationName": "Lecture Notes in Computer Science",
+                    "publisher": "Springer",
+                    "startingPage": "10",
+                    "endingPage": "20",
+                    "volume": "12345",
+                }
+            ],
+        }
+
+        records = springer.normalize_pages([page])
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["source"], "springer")
+        self.assertEqual(records[0]["authors"], "Smith, Ada; Doe, Ben")
+        self.assertEqual(records[0]["year"], "2024")
+        self.assertEqual(records[0]["pages"], "10-20")
+        self.assertEqual(records[0]["canonical_url"], "https://link.springer.com/chapter/10.1007/978-3-030-12345-6_7")
+
+    def test_springer_missing_credentials_writes_run_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_cwd = Path.cwd()
+            import os
+
+            old_key = os.environ.pop("SPRINGER_API_KEY", None)
+            try:
+                os.chdir(root)
+                result = springer.run_springer_search(
+                    generic_query="('dynamic') AND 'treemap'",
+                    slug="springer-test",
+                    run_date="2026-06-19",
+                )
+
+                self.assertEqual(result.status, "missing_credentials")
+                manifest = (result.run_dir / "sources" / "springer" / "source_manifest.json").read_text(encoding="utf-8")
+                self.assertIn('"status": "missing_credentials"', manifest)
+                self.assertIn('"api_key_env": "SPRINGER_API_KEY"', manifest)
+                self.assertNotIn("api_key=", manifest)
+            finally:
+                os.chdir(old_cwd)
+                if old_key is not None:
+                    os.environ["SPRINGER_API_KEY"] = old_key
+
+    def test_parse_springer_bibtex_and_ris_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bib = root / "springer.bib"
+            bib.write_text(
+                """@inproceedings{10.1007/test,
+  author = {Smith, Ada and Doe, Ben},
+  title = {Dynamic Treemap Layouts},
+  year = {2024},
+  booktitle = {Lecture Notes in Computer Science},
+  doi = {10.1007/test},
+  url = {https://link.springer.com/chapter/10.1007/test},
+  pages = {10--20},
+  publisher = {Springer}
+}
+""",
+                encoding="utf-8",
+            )
+            records = springer.parse_springer_export(bib, "bibtex")
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["source"], "springer")
+            self.assertEqual(records[0]["doi"], "10.1007/test")
+            self.assertEqual(records[0]["canonical_url"], "https://link.springer.com/chapter/10.1007/test")
+            self.assertEqual(records[0]["authors"], "Smith, Ada; Doe, Ben")
+
+            ris = root / "springer.ris"
+            ris.write_text(
+                """TY  - CPAPER
+AU  - Smith, Ada
+AU  - Doe, Ben
+TI  - Dynamic Treemap Layouts
+PY  - 2024
+DO  - 10.1007/test
+UR  - https://link.springer.com/chapter/10.1007/test
+T2  - Lecture Notes in Computer Science
+SP  - 10
+EP  - 20
+PB  - Springer
+ER  -
+""",
+                encoding="utf-8",
+            )
+            records = springer.parse_springer_export(ris, "ris")
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["pages"], "10-20")
+            self.assertEqual(records[0]["venue"], "Lecture Notes in Computer Science")
+
+    def test_parse_springer_csv_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            export = root / "springer.csv"
+            export.write_text(
+                """Item Title,Publication Title,Book Series Title,Journal Volume,Journal Issue,Item DOI,Authors,Publication Year,URL,Content Type
+Understanding transitions in animated bar charts,Visual Intelligence,,,,10.1007/s44267-023-00015-w,Datong WeiCan LiuXiaolong (Luke) ZhangXiaoru Yuan,2023,https://link.springer.com/article/10.1007/s44267-023-00015-w,Article
+Procedural texture patterns for encoding changes in color in 2.5D treemap visualizations,Journal of Visualization,,,,10.1007/s12650-022-00874-3,Daniel LimbergerWilly ScheibelJan van DiekenJ\u00fcrgen D\u00f6llner,2022,https://link.springer.com/article/10.1007/s12650-022-00874-3,Article
+\"TreeMap 2016 Dataset Generates CONUS-Wide Maps of Forest Characteristics Including Live Basal Area, Aboveground Carbon, and Number of Trees per Acre\",Journal of Forestry,,,,10.1093/jofore/fvac022,Karin L RileyIsaac C GrenfellJohn D ShawMark A Finney,2022,https://link.springer.com/article/10.1093/jofore/fvac022,Article
+""",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(springer.detect_export_format(export, "auto"), "csv")
+            records = springer.parse_springer_export(export, "csv")
+            self.assertEqual(len(records), 3)
+            self.assertEqual(records[0]["source"], "springer")
+            self.assertEqual(records[0]["title"], "Understanding transitions in animated bar charts")
+            self.assertEqual(records[0]["venue"], "Visual Intelligence")
+            self.assertEqual(records[0]["doi"], "10.1007/s44267-023-00015-w")
+            self.assertEqual(records[0]["year"], "2023")
+            self.assertEqual(records[0]["canonical_url"], "https://link.springer.com/article/10.1007/s44267-023-00015-w")
+            self.assertEqual(records[0]["authors"], "Datong Wei; Can Liu; Xiaolong (Luke) Zhang; Xiaoru Yuan")
+            self.assertEqual(records[1]["authors"], "Daniel Limberger; Willy Scheibel; Jan van Dieken; J\u00fcrgen D\u00f6llner")
+
+    def test_prepare_and_import_springer_manual_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_cwd = Path.cwd()
+            try:
+                import os
+
+                os.chdir(root)
+                export = root / "downloaded-springer.bib"
+                export.write_text(
+                    """@inproceedings{10.1007/test,
+  author = {Smith, Ada and Doe, Ben},
+  title = {Dynamic Treemap Layouts},
+  year = {2024},
+  booktitle = {Lecture Notes in Computer Science},
+  doi = {10.1007/test},
+  url = {https://link.springer.com/chapter/10.1007/test},
+  pages = {10--20},
+  publisher = {Springer}
+}
+""",
+                    encoding="utf-8",
+                )
+
+                prepared = springer.prepare_springer_manual_search(
+                    generic_query="('dynamic') AND 'treemap'",
+                    slug="springer-manual-test",
+                    run_date="2026-06-19",
+                )
+                self.assertEqual(prepared.status, "manual_export_required")
+                self.assertTrue((prepared.run_dir / "query.md").exists())
+
+                imported = springer.import_springer_export(
+                    run_dir=prepared.run_dir,
+                    export_path=export,
+                    export_format="bibtex",
+                    reported_count=1,
+                    source_url="https://link.springer.com/search?query=dynamic+AND+treemap",
+                )
+                self.assertEqual(imported.status, "ok")
+                self.assertEqual(imported.imported_count, 1)
+                self.assertTrue((prepared.run_dir / "sources" / "springer" / "raw" / export.name).exists())
+
+                candidates = (prepared.run_dir / "merged_candidates.csv").read_text(encoding="utf-8")
+                self.assertIn("smith2024dynamictreemaplayouts", candidates)
+                manifest = (prepared.run_dir / "sources" / "springer" / "source_manifest.json").read_text(encoding="utf-8")
+                self.assertIn('"manual_export": true', manifest)
+                self.assertIn('"export_format": "bibtex"', manifest)
+                bibtex = (root / "library" / "bibtex" / "candidates.bib").read_text(encoding="utf-8")
+                self.assertIn("@inproceedings{smith2024dynamictreemaplayouts,", bibtex)
+            finally:
+                import os
+
+                os.chdir(old_cwd)
+
+    def test_prepare_and_import_springer_csv_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_cwd = Path.cwd()
+            try:
+                import os
+
+                os.chdir(root)
+                export = root / "downloaded-springer.csv"
+                export.write_text(
+                    """Item Title,Publication Title,Book Series Title,Journal Volume,Journal Issue,Item DOI,Authors,Publication Year,URL,Content Type
+Procedural texture patterns for encoding changes in color in 2.5D treemap visualizations,Journal of Visualization,,,,10.1007/s12650-022-00874-3,Daniel LimbergerWilly ScheibelJan van DiekenJ\u00fcrgen D\u00f6llner,2022,https://link.springer.com/article/10.1007/s12650-022-00874-3,Article
+""",
+                    encoding="utf-8",
+                )
+
+                prepared = springer.prepare_springer_manual_search(
+                    generic_query="('dynamic') AND 'treemap'",
+                    slug="springer-csv-test",
+                    run_date="2026-06-19",
+                )
+                imported = springer.import_springer_export(
+                    run_dir=prepared.run_dir,
+                    export_path=export,
+                    export_format="auto",
+                    reported_count=1,
+                    source_url="https://link.springer.com/search?query=dynamic+AND+treemap",
+                )
+
+                self.assertEqual(imported.status, "ok")
+                self.assertEqual(imported.imported_count, 1)
+                candidates = (prepared.run_dir / "merged_candidates.csv").read_text(encoding="utf-8")
+                self.assertIn("limberger2022proceduraltexturepatterns", candidates)
+                manifest = (prepared.run_dir / "sources" / "springer" / "source_manifest.json").read_text(encoding="utf-8")
+                self.assertIn('"export_format": "csv"', manifest)
+                results = (prepared.run_dir / "sources" / "springer" / "springer_results.csv").read_text(encoding="utf-8")
+                self.assertIn("Daniel Limberger; Willy Scheibel; Jan van Dieken; J\u00fcrgen D\u00f6llner", results)
+            finally:
+                import os
+
+                os.chdir(old_cwd)
+
+    def test_run_springer_search_with_mocked_api(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_cwd = Path.cwd()
+            import os
+
+            old_key = os.environ.get("SPRINGER_API_KEY")
+            old_fetch = springer.fetch_springer_json
+            try:
+                os.chdir(root)
+                os.environ["SPRINGER_API_KEY"] = "secret-test-key"
+
+                def fake_fetch(url: str) -> dict[str, object]:
+                    self.assertIn("api_key=secret-test-key", url)
+                    return {
+                        "apiKey": "secret-test-key",
+                        "result": [{"total": "1", "start": "1", "pageLength": "1", "recordsDisplayed": "1"}],
+                        "records": [
+                            {
+                                "identifier": "doi:10.1007/test",
+                                "title": "Dynamic Treemap Layouts",
+                                "creators": [{"creator": "Smith, Ada"}],
+                                "publicationDate": "2024",
+                                "doi": "10.1007/test",
+                                "url": [
+                                    {
+                                        "format": "html",
+                                        "platform": "springer",
+                                        "value": "https://link.springer.com/article/10.1007/test",
+                                    }
+                                ],
+                                "publicationName": "Springer Test Journal",
+                                "publisher": "Springer",
+                            }
+                        ],
+                    }
+
+                springer.fetch_springer_json = fake_fetch
+                result = springer.run_springer_search(
+                    generic_query="('dynamic') AND 'treemap'",
+                    slug="springer-test",
+                    run_date="2026-06-19",
+                    page_size=1,
+                )
+
+                self.assertEqual(result.status, "ok")
+                self.assertEqual(result.imported_count, 1)
+                raw = (result.run_dir / "sources" / "springer" / "raw" / "page_0000.json").read_text(encoding="utf-8")
+                self.assertIn('"apiKey": "<redacted>"', raw)
+                self.assertNotIn("secret-test-key", raw)
+                manifest = (result.run_dir / "sources" / "springer" / "source_manifest.json").read_text(encoding="utf-8")
+                self.assertIn("api_key=%3Credacted%3E", manifest)
+                self.assertNotIn("secret-test-key", manifest)
+                candidates = (result.run_dir / "merged_candidates.csv").read_text(encoding="utf-8")
+                self.assertIn("smith2024dynamictreemaplayouts", candidates)
+            finally:
+                springer.fetch_springer_json = old_fetch
+                os.chdir(old_cwd)
+                if old_key is None:
+                    os.environ.pop("SPRINGER_API_KEY", None)
+                else:
+                    os.environ["SPRINGER_API_KEY"] = old_key
 
 
 if __name__ == "__main__":

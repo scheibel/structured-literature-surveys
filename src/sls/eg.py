@@ -503,6 +503,11 @@ def write_validation_report(
     if source_reported_count != imported_count:
         severity = "expected" if max_results is not None and imported_count <= max_results else "warning"
         lines.append(f"- Count mismatch: {severity}")
+        if max_results is None and source_reported_count > imported_count and imported_count == 1000:
+            lines.append(
+                "- Suspected export cap: imported exactly 1000 records while the source reported more; "
+                "partition the manual search or use an API connector with pagination."
+            )
     missing = {
         "title": sum(1 for c in candidates if not c.get("title")),
         "authors": sum(1 for c in candidates if not c.get("authors")),
@@ -568,4 +573,3 @@ def git_revision() -> str:
         ).strip()
     except Exception:
         return "unknown"
-
