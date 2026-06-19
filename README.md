@@ -35,7 +35,7 @@ For one literature-search iteration, the intended process is:
 
 1. Define the query.
 2. Run a dry run and inspect the translated query.
-3. Run the live EG search.
+3. Run the live EG search, or prepare and import a manual ACM export.
 4. Inspect validation and candidate outputs.
 5. Work through `manual_action_queue.csv`.
 6. For each missing PDF, use the canonical URL to assess access manually.
@@ -43,9 +43,11 @@ For one literature-search iteration, the intended process is:
 8. Refresh the run and regenerate the missing-PDF report.
 9. Stop when validation is acceptable and the remaining manual actions are understood.
 
-The current spike supports this end to end for the EG Digital Library only.
+The current spike supports this end to end for the EG Digital Library and supports ACM Digital Library through a human-executed BibTeX/RIS export.
 
 ## End-to-End Workflow
+
+The EG workflow is fully automated for public metadata. The ACM workflow is intentionally human-assisted: the script prepares the query and run folder, the researcher executes the search/export in the ACM browser UI, and the script imports the resulting BibTeX or RIS file.
 
 ### 1. Write your query
 
@@ -196,21 +198,64 @@ A run is ready as input to downstream analysis when:
 
 It is acceptable for some PDFs to remain missing if access is unavailable or not yet assessed. The important part is that the missing state is explicit and traceable.
 
+## ACM Manual Export Workflow
+
+Use this workflow when the next source is ACM Digital Library. The script does not scrape ACM or automate browser interaction.
+
+### 1. Prepare the ACM run
+
+```bash
+python3 scripts/sls acm-prepare \
+  --query "('temporal' OR 'dynamic' OR 'animated') AND 'treemap'" \
+  --slug temporal-treemap-acm
+```
+
+The command creates `searches/YYYY-MM-DD_temporal-treemap-acm/` and writes:
+
+| File | What it contains |
+|---|---|
+| `query.md` | Generic query, ACM translated query, ACM browser URL, and manual execution notes |
+| `run_config.json` | Query, prepared ACM URL, code version, and tool metadata |
+| `sources/acm/query_semantics.md` | Translation notes and manual verification reminders |
+| `sources/acm/source_manifest.json` | Status `manual_export_required` until an export is imported |
+| `validation_report.md` | A pending-export placeholder |
+
+### 2. Execute the search manually
+
+Open the ACM URL from `query.md` in a normal browser session. Confirm the query and filters, record the visible result count, and export the result set as BibTeX or RIS using ACM's own export controls.
+
+Keep the exported file unchanged. The import step will copy it into `sources/acm/raw/` as the immutable raw artifact.
+
+### 3. Import the ACM export
+
+```bash
+python3 scripts/sls acm-import \
+  --run-dir searches/YYYY-MM-DD_temporal-treemap-acm \
+  --export ~/Downloads/acm-export.bib \
+  --format auto \
+  --reported-count 42 \
+  --source-url "https://dl.acm.org/action/doSearch?..."
+```
+
+The import step parses BibTeX or RIS, writes `sources/acm/acm_results.csv`, regenerates `merged_candidates.csv`, updates `library/bibtex/candidates.bib`, reconciles known PDFs, and refreshes `manual_action_queue.csv` and `validation_report.md`.
+
+If ACM's visible result count differs from the imported record count, the validation report flags the mismatch. This usually means an export cap, page-only export, filter mismatch, or a manual export mistake that should be documented or corrected.
+
 ## Currently Supported Sources
 
 | Source | Mode | What is required |
 |---|---|---|
 | EG Digital Library (Eurographics) | Automated via DSpace REST API | Nothing — public API |
-| ACM Digital Library | Manual export | Open in browser, search, export citation file |
+| ACM Digital Library | Manual BibTeX/RIS export ingest | Open in browser, search, export citation file, then run `acm-import` |
 | IEEE Xplore | API (not yet implemented) | API key |
 | ScienceDirect | API (not yet implemented) | Elsevier API key |
 | Scopus | API (not yet implemented) | Elsevier API key |
 | Web of Science | API (not yet implemented) | Clarivate API key and license |
 | Google Scholar | Not automated | Manual export only; no official bulk API |
 
-For sources that require a manual export: run the pipeline with `--dry-run` first to get the translated query, execute the search in your browser, export using the library's own export controls, and place the export file in the appropriate `sources/<source>/` directory. Automated ingest of those exports is not yet implemented.
+For sources that require a manual export: prepare the run first to get the translated query and source instructions, execute the search in your browser, export using the library's own export controls, and import the raw export with the matching source command when available.
 
-For the current spike, another researcher should use only the EG automated workflow for reproducible execution.
+For the current spike, another researcher can execute EG automatically or ACM through the manual-export workflow. Other sources remain documented requirements only.
 
 ## Rerunning or Resuming a Search
 
@@ -225,6 +270,8 @@ python3 scripts/sls eg-search \
 ```
 
 Raw source exports (`sources/eg/raw/`) are always treated as immutable records of what was retrieved.
+
+For ACM imports, raw export files under `sources/acm/raw/` are also immutable. Re-importing the same run with a different raw export requires a new filename, so the run preserves what was actually supplied.
 
 ## Project-Level Library
 
@@ -254,6 +301,12 @@ Run `python3 scripts/sls pdfs refresh <run-dir>`. If it still appears, check tha
 
 **A PDF was registered by mistake.**
 Delete the corresponding row from `library/manifests/pdfs.csv`, remove the PDF from `library/pdfs/` if it was copied there, and run `python3 scripts/sls pdfs refresh <run-dir>`.
+
+**An ACM import reports a count mismatch.**
+Compare `sources/acm/source_manifest.json`, the browser result count you recorded, and the exported file. Common causes are exporting only selected records, exporting only the current page, or changing filters between search and export.
+
+**An ACM raw export already exists.**
+Raw exports are immutable. Use a new export filename or create a new run directory rather than overwriting `sources/acm/raw/<filename>`.
 
 ## Tests
 

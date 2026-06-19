@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 
+from .acm import import_acm_export, prepare_acm_search
 from .eg import run_eg_search
 from .pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
 
@@ -52,6 +53,65 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         action="store_true",
         help="Create the run skeleton and query reports without contacting EG.",
+    )
+
+    acm_prepare = subparsers.add_parser(
+        "acm-prepare",
+        help="Prepare an ACM Digital Library manual-export search run.",
+    )
+    acm_prepare.add_argument(
+        "--query",
+        required=True,
+        help="Generic Boolean query, e.g. \"('temporal' OR 'dynamic') AND 'treemap'\".",
+    )
+    acm_prepare.add_argument(
+        "--slug",
+        help="Human-readable search slug. Defaults to a slug derived from the query.",
+    )
+    acm_prepare.add_argument(
+        "--date",
+        help="Run date in YYYY-MM-DD form. Defaults to today's local date.",
+    )
+    acm_prepare.add_argument(
+        "--overwrite-derived",
+        action="store_true",
+        help="Allow regenerating derived ACM preparation artifacts in an existing run directory.",
+    )
+
+    acm_import = subparsers.add_parser(
+        "acm-import",
+        help="Import a researcher-obtained ACM BibTeX or RIS export.",
+    )
+    acm_import.add_argument(
+        "--run-dir",
+        required=True,
+        help="Search run directory created by acm-prepare.",
+    )
+    acm_import.add_argument(
+        "--export",
+        required=True,
+        help="Path to the raw ACM export file obtained through the ACM UI.",
+    )
+    acm_import.add_argument(
+        "--format",
+        choices=["auto", "bibtex", "ris"],
+        default="auto",
+        help="Export format. Defaults to auto-detect from file extension/content.",
+    )
+    acm_import.add_argument(
+        "--reported-count",
+        type=int,
+        help="Visible result count reported by ACM for this search/export.",
+    )
+    acm_import.add_argument(
+        "--source-url",
+        default="",
+        help="Final ACM browser URL used for the manual search, if it differs from the prepared URL.",
+    )
+    acm_import.add_argument(
+        "--notes",
+        default="",
+        help="Optional notes about filters, export limits, or manual observations.",
     )
 
     pdfs = subparsers.add_parser(
@@ -116,6 +176,35 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"run_dir={result.run_dir}")
         print(f"status={result.status}")
+        print(f"source_reported_count={result.source_reported_count}")
+        print(f"imported_count={result.imported_count}")
+        print(f"deduplicated_count={result.deduplicated_count}")
+        return 0
+
+    if args.command == "acm-prepare":
+        result = prepare_acm_search(
+            generic_query=args.query,
+            slug=args.slug,
+            run_date=args.date,
+            overwrite_derived=args.overwrite_derived,
+        )
+        print(f"run_dir={result.run_dir}")
+        print(f"status={result.status}")
+        print(f"manual_action=run ACM search in browser, export BibTeX or RIS, then run acm-import")
+        return 0
+
+    if args.command == "acm-import":
+        result = import_acm_export(
+            run_dir=Path(args.run_dir),
+            export_path=Path(args.export),
+            export_format=args.format,
+            reported_count=args.reported_count,
+            source_url=args.source_url,
+            notes=args.notes,
+        )
+        print(f"run_dir={result.run_dir}")
+        print(f"status={result.status}")
+        print(f"raw_export_path={result.raw_export_path}")
         print(f"source_reported_count={result.source_reported_count}")
         print(f"imported_count={result.imported_count}")
         print(f"deduplicated_count={result.deduplicated_count}")

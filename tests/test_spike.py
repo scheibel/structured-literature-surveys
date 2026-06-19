@@ -7,10 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from sls.bibtex import record_to_bibtex
+from sls.acm import import_acm_export, parse_acm_export, prepare_acm_search
 from sls.eg import deduplicate, normalize_pages
 from sls.identity import assign_candidate_ids
 from sls.pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
-from sls.query import translate_for_eg
+from sls.query import translate_for_acm, translate_for_eg
 
 
 class SpikeTests(unittest.TestCase):
@@ -19,6 +20,12 @@ class SpikeTests(unittest.TestCase):
 
         self.assertEqual(translation.translated_query, "(temporal OR dynamic OR animated) AND treemap")
         self.assertTrue(any("Single-quoted" in note for note in translation.semantics_notes))
+
+    def test_translate_generic_query_for_acm(self) -> None:
+        translation = translate_for_acm("('temporal' OR 'dynamic' OR 'animated') AND 'treemap'")
+
+        self.assertEqual(translation.translated_query, "(temporal OR dynamic OR animated) AND treemap")
+        self.assertEqual(translation.source, "acm")
 
     def test_normalize_deduplicate_and_bibtex(self) -> None:
         page = {
@@ -129,6 +136,133 @@ class SpikeTests(unittest.TestCase):
                 self.assertEqual(mapped, 1)
                 missing = write_missing_pdf_report(root / "library" / "manifests" / "missing.csv", run_dir)
                 self.assertEqual(missing, [])
+            finally:
+                import os
+
+                os.chdir(old_cwd)
+
+    def test_parse_acm_bibtex_and_ris_exports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bib = root / "acm.bib"
+            bib.write_text(
+                """@inproceedings{10.1145/1234567.1234568,
+  author = {Smith, Ada and Doe, Ben},
+  title = {Dynamic Treemaps Revisited},
+  year = {2024},
+  booktitle = {Proceedings of the ACM Test Conference},
+  doi = {10.1145/1234567.1234568},
+  pages = {1--10},
+  publisher = {Association for Computing Machinery}
+}
+""",
+                encoding="utf-8",
+            )
+            records = parse_acm_export(bib, "bibtex")
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["source"], "acm")
+            self.assertEqual(records[0]["doi"], "10.1145/1234567.1234568")
+            self.assertEqual(records[0]["canonical_url"], "https://dl.acm.org/doi/10.1145/1234567.1234568")
+            self.assertEqual(records[0]["authors"], "Smith, Ada; Doe, Ben")
+
+            ris = root / "acm.ris"
+            ris.write_text(
+                """TY  - CPAPER
+AU  - Smith, Ada
+AU  - Doe, Ben
+TI  - Dynamic Treemaps Revisited
+PY  - 2024
+DO  - 10.1145/1234567.1234568
+T2  - Proceedings of the ACM Test Conference
+SP  - 1
+EP  - 10
+PB  - Association for Computing Machinery
+ER  -
+""",
+                encoding="utf-8",
+            )
+            records = parse_acm_export(ris, "ris")
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]["pages"], "1-10")
+            self.assertEqual(records[0]["venue"], "Proceedings of the ACM Test Conference")
+
+    def test_acm_bibtex_latex_accents_normalize_for_candidate_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bib = root / "acm.bib"
+            bib.write_text(
+                r"""@inproceedings{10.1145/9999999,
+  author = {D{\"o}llner, J{\"u}rgen and S{\u{a}}lcianu, Alexandru and Maga\~na, Maria},
+  title = {A&nbsp;Treemap Study},
+  year = {2024},
+  booktitle = {Proceedings of the ACM Test Conference},
+  doi = {10.1145/9999999}
+}
+""",
+                encoding="utf-8",
+            )
+            records = parse_acm_export(bib, "bibtex")
+            self.assertEqual(records[0]["authors"], "D\u00f6llner, J\u00fcrgen; S\u0103lcianu, Alexandru; Maga\u00f1a, Maria")
+            self.assertEqual(records[0]["title"], "A Treemap Study")
+
+            candidates = deduplicate(records)
+            assign_candidate_ids(candidates)
+            self.assertEqual(candidates[0]["candidate_id"], "dollner2024treemapstudy")
+
+    def test_prepare_and_import_acm_manual_export(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_cwd = Path.cwd()
+            try:
+                import os
+
+                os.chdir(root)
+                export = root / "downloaded-acm.bib"
+                export.write_text(
+                    """@inproceedings{10.1145/1234567.1234568,
+  author = {Smith, Ada and Doe, Ben},
+  title = {Dynamic Treemaps Revisited},
+  year = {2024},
+  booktitle = {Proceedings of the ACM Test Conference},
+  doi = {10.1145/1234567.1234568},
+  pages = {1--10},
+  publisher = {Association for Computing Machinery}
+}
+""",
+                    encoding="utf-8",
+                )
+
+                prepared = prepare_acm_search(
+                    generic_query="('dynamic') AND 'treemap'",
+                    slug="acm-test",
+                    run_date="2026-06-19",
+                )
+                self.assertEqual(prepared.status, "manual_export_required")
+                self.assertTrue((prepared.run_dir / "query.md").exists())
+
+                imported = import_acm_export(
+                    run_dir=prepared.run_dir,
+                    export_path=export,
+                    export_format="bibtex",
+                    reported_count=1,
+                    source_url="https://dl.acm.org/action/doSearch?AllField=dynamic+AND+treemap",
+                )
+                self.assertEqual(imported.status, "ok")
+                self.assertEqual(imported.imported_count, 1)
+                self.assertTrue((prepared.run_dir / "sources" / "acm" / "raw" / export.name).exists())
+
+                reimported = import_acm_export(
+                    run_dir=prepared.run_dir,
+                    export_path=imported.raw_export_path,
+                    export_format="bibtex",
+                    reported_count=1,
+                )
+                self.assertEqual(reimported.imported_count, 1)
+
+                candidates = (prepared.run_dir / "merged_candidates.csv").read_text(encoding="utf-8")
+                self.assertIn("smith2024dynamictreemapsrevisited", candidates)
+                bibtex = (root / "library" / "bibtex" / "candidates.bib").read_text(encoding="utf-8")
+                self.assertIn("@inproceedings{smith2024dynamictreemapsrevisited,", bibtex)
             finally:
                 import os
 

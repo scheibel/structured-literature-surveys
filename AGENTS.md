@@ -146,7 +146,7 @@ Last checked: 2026-06-18.
 
 | Source | Connector status for v1 | Key/access requirement | Notes |
 | --- | --- | --- | --- |
-| ACM Digital Library | Manual export or DOI enrichment first; no public official search API found. | No usable public no-key API quota found. | Direct non-browser access to an ACM search URL returned a Cloudflare JavaScript challenge. If the UI exposes RSS/feed links, treat them as auxiliary unless ACM documents complete search export behavior. HTML/feed polyfill requires explicit compliance review. |
+| ACM Digital Library | Manual BibTeX/RIS export ingest implemented for the spike; no public official search API found. | No usable public no-key API quota found. | The framework prepares ACM browser-search instructions and imports researcher-obtained BibTeX/RIS exports. Direct non-browser access to an ACM search URL returned a Cloudflare JavaScript challenge. If the UI exposes RSS/feed links, treat them as auxiliary unless ACM documents complete search export behavior. HTML/feed polyfill requires explicit compliance review. |
 | EG Digital Library / Eurographics | Use OAI-PMH first; DSpace REST only if needed. | No key required for verified public OAI-PMH endpoint. | Verified `https://diglib.eg.org/server/oai/request` and `https://diglib.eg.org/server/api`. OAI formats include `oai_dc`, `qdc`, `mods`, `marc`, `mets`, `rdf`, `xoai`, and `dim`. |
 | IEEE Xplore | Use documented IEEE Metadata API. | API key required; no no-key quota found. | Each query requires a reviewed account/API key. Record missing keys as `missing_credentials`; do not fall back to page scraping. |
 | ScienceDirect | Use Elsevier ScienceDirect APIs when configured. | Elsevier API key required; full API behavior may depend on institutional entitlements. | For metadata-driven v1, record missing key, quota, or denied request states explicitly. Avoid HTML parsing as a key workaround. |
@@ -216,7 +216,7 @@ Recommended script responsibilities:
 - Maintain candidate IDs, BibTeX keys, PDF manifests, and manual override mappings.
 - Never automate browser interaction or bypass source restrictions unless a later requirement explicitly authorizes a reviewed connector.
 
-This workflow should be the default for sources such as ACM Digital Library and Google Scholar, and an acceptable fallback for API-backed sources when credentials are unavailable.
+This workflow is implemented for ACM Digital Library in the current spike and should be the default for sources such as Google Scholar, and an acceptable fallback for API-backed sources when credentials are unavailable.
 
 ## Candidate Pipeline Stages
 
