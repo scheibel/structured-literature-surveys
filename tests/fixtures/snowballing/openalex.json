@@ -1,0 +1,95 @@
+{
+  "works": [
+    {
+      "id": "https://openalex.org/W1",
+      "doi": "https://doi.org/10.1234/a",
+      "title": "Alpha seed study",
+      "publication_year": 2020,
+      "authorships": [
+        {
+          "author": {
+            "display_name": "Alice Author"
+          }
+        }
+      ],
+      "primary_location": {
+        "source": {
+          "type": "journal",
+          "display_name": "Fixture Journal"
+        }
+      },
+      "biblio": {
+        "volume": "1"
+      },
+      "referenced_works": [
+        "https://openalex.org/W3"
+      ],
+      "cited_by_count": 1
+    },
+    {
+      "id": "https://openalex.org/W2",
+      "doi": "https://doi.org/10.1234/b",
+      "title": "Beta seed study",
+      "publication_year": 2021,
+      "authorships": [
+        {
+          "author": {
+            "display_name": "Bob Writer"
+          }
+        }
+      ],
+      "primary_location": {
+        "source": {
+          "type": "journal",
+          "display_name": "Fixture Journal"
+        }
+      },
+      "biblio": {
+        "volume": "1"
+      },
+      "referenced_works": [
+        "https://openalex.org/W3",
+        "https://openalex.org/W1"
+      ],
+      "cited_by_count": 0
+    },
+    {
+      "id": "https://openalex.org/W3",
+      "doi": "https://doi.org/10.1234/c",
+      "title": "Common reference",
+      "publication_year": 2010,
+      "authorships": [
+        {
+          "author": {
+            "display_name": "Carol Researcher"
+          }
+        }
+      ],
+      "primary_location": {
+        "source": {
+          "type": "journal",
+          "display_name": "Fixture Journal"
+        }
+      },
+      "biblio": {
+        "volume": "1"
+      },
+      "referenced_works": [],
+      "cited_by_count": 2
+    }
+  ],
+  "edges": [
+    [
+      "a",
+      "c"
+    ],
+    [
+      "b",
+      "c"
+    ],
+    [
+      "b",
+      "a"
+    ]
+  ]
+}

@@ -10,13 +10,35 @@ from sls.bibtex import record_to_bibtex
 from sls.acm import import_acm_export, parse_acm_export, prepare_acm_search
 from sls.dblp import normalize_pages as normalize_dblp_pages
 from sls.eg import deduplicate, normalize_pages, write_validation_report
-from sls.identity import assign_candidate_ids
+from sls.identity import assign_candidate_ids, normalize_doi
 from sls.pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
 from sls.query import translate_for_acm, translate_for_dblp, translate_for_eg, translate_for_springer
 import sls.springer as springer
 
 
 class SpikeTests(unittest.TestCase):
+    def test_doi_url_normalization(self) -> None:
+        variants = [
+            " 10.1111/CGF.15087 ",
+            "doi: 10.1111/CGF.15087",
+            "https://doi.org/10.1111/CGF.15087",
+            "HTTP://DX.DOI.ORG/10.1111/CGF.15087",
+            "https://onlinelibrary.wiley.com/doi/10.1111/CGF.15087",
+            "https://publisher.example/content/doi/10.1111/CGF.15087?tracking=123#references",
+            "https://publisher.example/doi/10.1111%2FCGF.15087",
+        ]
+        for value in variants:
+            with self.subTest(value=value):
+                self.assertEqual(normalize_doi(value), "10.1111/cgf.15087")
+
+    def test_doi_normalization_preserves_suffix_and_ignores_unrelated_urls(self) -> None:
+        value = "10.1234/part/doi/10.5678/item(2)?x#y"
+        self.assertEqual(normalize_doi(value), value)
+        self.assertEqual(normalize_doi("https://publisher.example/doi/10.1234/part(2)/item"), "10.1234/part(2)/item")
+        for value in ("https://publisher.example/doi/not-a-doi", "https://publisher.example/search?q=/doi/10.1234/example"):
+            with self.subTest(value=value):
+                self.assertEqual(normalize_doi(value), value)
+
     def test_translate_generic_query_for_eg(self) -> None:
         translation = translate_for_eg("('temporal' OR 'dynamic' OR 'animated') AND 'treemap'")
 

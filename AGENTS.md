@@ -29,7 +29,24 @@ For now, source connectors collect publicly available bibliographic metadata nee
 - DOI, when available
 - Canonical publisher URL, when available
 
-Additional citation metadata needed for valid BibTeX entries, such as venue, volume, issue, pages, publisher, or proceedings title, may be preserved when available from permitted exports or metadata sources. Abstracts, references, citation counts, affiliations, keywords, funding data, and full-text content extraction or analysis remain out of scope unless later added explicitly.
+Additional citation metadata needed for valid BibTeX entries, such as venue, volume, issue, pages, publisher, or proceedings title, may be preserved when available from permitted exports or metadata sources. Abstracts, affiliations, keywords, funding data, and full-text content extraction or analysis remain out of scope unless later added explicitly. Reference and citation relationships are included in the planned snowballing extension below; general citation-count analysis remains out of scope.
+
+## Snowballing Extension Requirements
+
+Recorded 2026-09-10; implementation authorized 2026-09-11.
+
+- Plan backward (papers a seed cites) and forward (papers citing a seed) discovery through OpenAlex, Semantic Scholar, and OpenCitations.
+- Smoke tests report observable data-quality limitations alongside API availability and parsing results. They do not establish citation ground truth.
+- Include duplicate filtering across results from multiple seeds and multiple services while retaining source and discovery provenance.
+- Preserve the existing restrictions on full-text retrieval, access assessment, and automated screening.
+- The implementation sequence is documented in [docs/snowballing-implementation-plan.md](docs/snowballing-implementation-plan.md); the implemented CLI and limitations are documented in [docs/snowballing.md](docs/snowballing.md).
+- The first implementation uses explicit seeds, one round, both directions by default, and independently configurable OpenAlex, Semantic Scholar, and OpenCitations adapters. Normal runs live under `searches/`; smoke tests use isolated `smoke-tests/` workspaces and libraries.
+- Seed DOI fields accept bare DOIs, DOI resolver URLs, and HTTP(S) publisher URLs whose paths contain `/doi/<doi>`. Normalization extracts the DOI locally, decodes URL path escapes, and excludes URL queries/fragments. Original seed files remain preserved as provenance; no publisher-page retrieval is needed.
+- Raw responses and input/configuration snapshots are immutable. Resume reuses cached successes within the original request budget; rebuild is offline and does not publish library updates.
+- Paper identities and directed citation edges are deduplicated separately while all provider/seed observations remain traceable. Conflicting strong identities must not be merged by weaker evidence.
+- Decision 2026-09-12: accept inherent citation-source quality uncertainty as a reported limitation for this iteration. Building an independent reference benchmark, adjudicating citation correctness, estimating false-positive/false-negative rates, and correcting upstream citation data are not required and must not remain completion gates or mandatory follow-up work.
+- Continue testing implementation behavior: parsing, direction handling, deduplication, provenance, pagination, resume/replay, and isolation. Distinguish implementation defects and incomplete retrieval from uncertain source data. Report anomalies and provider disagreement without claiming they prove an error, automatically removing relationships, or claiming provider agreement proves correctness.
+- Existing optional quality-evaluation tools may report `inconclusive`; this does not block acceptance solely because no reviewed benchmark, sample judgments, or calibrated thresholds exist. Preserve historical reports and expose retrieval restrictions separately. The latest live pilot exercised all three providers, with early rate limiting on Semantic Scholar.
 
 ## Core Requirements
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from urllib.parse import unquote, urlsplit
 
 
 STOPWORDS = {
@@ -40,9 +41,22 @@ def ascii_slug(value: str, *, max_len: int | None = None) -> str:
 
 
 def normalize_doi(doi: str) -> str:
+    """Normalize bare DOIs and DOI URLs without contacting the publisher."""
     doi = doi.strip()
-    doi = re.sub(r"^https?://(dx\.)?doi\.org/", "", doi, flags=re.I)
     doi = re.sub(r"^doi:\s*", "", doi, flags=re.I)
+    if re.match(r"^https?://", doi, flags=re.I):
+        try:
+            url = urlsplit(doi)
+            path = unquote(url.path)
+            if url.hostname in ("doi.org", "dx.doi.org"):
+                doi = path.lstrip("/")
+            else:
+                match = re.search(r"/doi/(10\.\d{4,9}/\S+)$", path, flags=re.I)
+                if match:
+                    doi = match.group(1)
+        except ValueError:
+            # Leave malformed or unsupported URLs unchanged apart from case.
+            pass
     return doi.lower()
 
 
@@ -108,4 +122,3 @@ def assign_candidate_ids(records: list[dict[str, str]]) -> None:
         candidate_id = base if count == 0 else f"{base}{count + 1}"
         record["candidate_id"] = candidate_id
         record["bibtex_key"] = candidate_id
-

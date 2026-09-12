@@ -1,0 +1,7 @@
+{
+  "version": "pilot-2026-09-11-unreviewed",
+  "sampling_seed": 42,
+  "sample_per_stratum": 5,
+  "minimum_known_edge_recovery": null,
+  "minimum_sample_correctness": null
+}

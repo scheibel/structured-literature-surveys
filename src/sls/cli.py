@@ -9,6 +9,7 @@ from .dblp import run_dblp_search
 from .eg import run_eg_search
 from .pdfs import register_pdf, refresh_run_pdf_status, write_missing_pdf_report
 from .springer import import_springer_export, prepare_springer_manual_search, run_springer_search
+from .snowball.cli import add_parser as add_snowball_parser, run as run_snowball
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Structured literature search spike tooling.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    add_snowball_parser(subparsers)
 
     eg = subparsers.add_parser(
         "eg-search",
@@ -319,6 +321,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "snowball":
+        return run_snowball(args)
 
     if args.command == "eg-search":
         result = run_eg_search(

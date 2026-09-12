@@ -17,6 +17,8 @@ python3 scripts/sls --help
 
 ## Concepts
 
+For backward and forward citation discovery from known papers, use `python3 scripts/sls snowball --help`. The [snowballing guide](docs/snowballing.md) covers all three providers, duplicate filtering, safe resume/rebuild, and isolated reference-quality smoke tests.
+
 **Search run** — one execution of the pipeline for a given query. Each run gets its own directory under `searches/YYYY-MM-DD_slug/` so nothing is ever overwritten. You can have many runs for the same topic.
 
 **Candidate** — a deduplicated literature record. Multiple source records that refer to the same paper (matched by DOI, then canonical URL, then normalized title + year) collapse into one candidate with a stable `candidate_id`.

@@ -1,0 +1,4 @@
+candidate_id,doi,title,authors,year,canonical_url
+han2023sizepairsachievingstable,10.1109/tvcg.2022.3209450,SizePairs: Achieving Stable and Balanced Temporal Treemaps using Hierarchical Size-based Pairing.,Chang Han; Jaemin Jo; Anyi Li; Bongshin Lee; Oliver Deussen; Yunhai Wang,2023,https://doi.org/10.1109/TVCG.2022.3209450
+rycke2025visualizingdataaccess,10.1109/vissoft67405.2025.00017,Visualizing Data Access Traces in Microservices Using Animated Heat Treemaps.,Maxime De Rycke; Maxime André 0001; Marco Raglianti; Anthony Cleve; Michele Lanza 0001,2025,https://doi.org/10.1109/VISSOFT67405.2025.00017
+dobler2024improvingtemporaltreemaps,10.1111/cgf.15087,Improving Temporal Treemaps by Minimizing Crossings.,Alexander Dobler; Martin Nöllenburg,2024,https://doi.org/10.1111/cgf.15087

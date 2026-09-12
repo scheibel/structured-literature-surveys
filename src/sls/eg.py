@@ -21,56 +21,7 @@ EG_UI_SEARCH_URL = "https://diglib.eg.org/discover"
 USER_AGENT = "structured-literature-surveys-spike/0.1 (+https://diglib.eg.org metadata workflow)"
 
 
-SOURCE_FIELDNAMES = [
-    "source",
-    "source_record_id",
-    "title",
-    "authors",
-    "year",
-    "doi",
-    "canonical_url",
-    "venue",
-    "publisher",
-    "pages",
-    "volume",
-    "number",
-    "source_api_url",
-]
-
-CANDIDATE_FIELDNAMES = [
-    "candidate_id",
-    "bibtex_key",
-    "title",
-    "authors",
-    "year",
-    "doi",
-    "canonical_url",
-    "venue",
-    "publisher",
-    "pages",
-    "volume",
-    "number",
-    "source_count",
-    "sources",
-    "source_record_ids",
-    "dedupe_key",
-    "dedupe_confidence",
-    "has_local_pdf",
-    "pdf_path",
-    "has_bibtex",
-    "manual_review",
-]
-
-ACTION_FIELDNAMES = [
-    "candidate_id",
-    "action",
-    "reason",
-    "title",
-    "authors",
-    "year",
-    "doi",
-    "canonical_url",
-]
+from .metadata import SOURCE_FIELDNAMES, CANDIDATE_FIELDNAMES, ACTION_FIELDNAMES
 
 
 @dataclass(frozen=True)

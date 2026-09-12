@@ -1,0 +1,75 @@
+{
+  "works": [
+    {
+      "paperId": "a",
+      "externalIds": {
+        "DOI": "10.1234/a"
+      },
+      "title": "Alpha seed study",
+      "year": 2020,
+      "authors": [
+        {
+          "name": "Alice Author"
+        }
+      ],
+      "venue": "Fixture Journal",
+      "journal": {
+        "volume": "1"
+      },
+      "referenceCount": 1,
+      "citationCount": 1
+    },
+    {
+      "paperId": "b",
+      "externalIds": {
+        "DOI": "10.1234/b"
+      },
+      "title": "Beta seed study",
+      "year": 2021,
+      "authors": [
+        {
+          "name": "Bob Writer"
+        }
+      ],
+      "venue": "Fixture Journal",
+      "journal": {
+        "volume": "1"
+      },
+      "referenceCount": 2,
+      "citationCount": 0
+    },
+    {
+      "paperId": "c",
+      "externalIds": {
+        "DOI": "10.1234/c"
+      },
+      "title": "Common reference",
+      "year": 2010,
+      "authors": [
+        {
+          "name": "Carol Researcher"
+        }
+      ],
+      "venue": "Fixture Journal",
+      "journal": {
+        "volume": "1"
+      },
+      "referenceCount": 0,
+      "citationCount": 2
+    }
+  ],
+  "edges": [
+    [
+      "a",
+      "c"
+    ],
+    [
+      "b",
+      "c"
+    ],
+    [
+      "b",
+      "a"
+    ]
+  ]
+}

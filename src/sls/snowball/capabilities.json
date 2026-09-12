@@ -1,0 +1,41 @@
+{
+  "reviewed_at": "2026-09-11",
+  "scope": "Bibliographic metadata and directed citation edges for research; no HTML, full text, citation contexts or recommendations",
+  "openalex": {
+    "api": "https://api.openalex.org/works",
+    "documentation": "https://help.openalex.org/how-to/api-recipes/",
+    "authentication": "OPENALEX_API_KEY query parameter when configured; basic unauthenticated queries supported subject to provider limits",
+    "quota_policy": "At least one second between requests plus configured request budget. Free API usage is limited; do not assume unlimited requests.",
+    "access_reference": "https://help.openalex.org/api/authentication/",
+    "terms_reference": "https://help.openalex.org/access/pricing/",
+    "license": "CC0 data; API access subject to provider limits",
+    "pagination": "Forward cursor pagination; backward referenced_works list with metadata batches of at most 100",
+    "fields": "id,doi,title,publication_year,authorships,primary_location,biblio,referenced_works,cited_by_count",
+    "limitation": "Indexed relationships only; missing hydrated records retained as unresolved metadata"
+  },
+  "semantic_scholar": {
+    "api": "https://api.semanticscholar.org/graph/v1/paper",
+    "documentation": "https://api.semanticscholar.org/api-docs/graph",
+    "authentication": "SEMANTIC_SCHOLAR_API_KEY in x-api-key when configured; public endpoints share a throttled unauthenticated pool",
+    "quota_policy": "Introductory authenticated limit is 1 request/second; bounded retries respect Retry-After",
+    "access_reference": "https://www.semanticscholar.org/product/api",
+    "terms_reference": "https://www.semanticscholar.org/product/api/license",
+    "license": "Semantic Scholar API License Agreement; research workflow; attribute Semantic Scholar in published outputs",
+    "pagination": "references and citations data arrays with next offsets; maximum requested page size 1000",
+    "fields": "paperId,externalIds,title,year,authors,venue,journal,referenceCount,citationCount",
+    "limitation": "Null endpoints retained; shared unauthenticated throttling may prevent a complete pilot"
+  },
+  "opencitations": {
+    "api": "https://api.opencitations.net/index/v2",
+    "metadata_api": "https://api.opencitations.net/meta/v1/metadata/",
+    "documentation": "https://api.opencitations.net/index/v2",
+    "metadata_documentation": "https://api.opencitations.net/meta/v1",
+    "authentication": "OPENCITATIONS_ACCESS_TOKEN in authorization when configured; token encouraged",
+    "quota_policy": "Documented 180 requests/minute/IP; implementation uses at most 1 request/second",
+    "terms_reference": "https://opencitations.net/querying/",
+    "license": "CC0 data",
+    "pagination": "Index v2 returns one JSON list; no invented pagination. Relationship cap is applied locally and does not bound HTTP response size.",
+    "fields": "OCI, citing/cited identifiers; Meta bibliographic fields",
+    "limitation": "Total is unknown unless independently supplied; metadata hydration failures are retained"
+  }
+}

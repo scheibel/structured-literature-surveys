@@ -1,0 +1,42 @@
+{
+  "works": [
+    {
+      "id": "doi:10.1234/a omid:br/1",
+      "title": "Alpha seed study",
+      "author": "Alice Author [omid:ra/1]",
+      "pub_date": "2020",
+      "venue": "Fixture Journal [issn:1234-5678]",
+      "volume": "1"
+    },
+    {
+      "id": "doi:10.1234/b omid:br/2",
+      "title": "Beta seed study",
+      "author": "Bob Writer [omid:ra/1]",
+      "pub_date": "2021",
+      "venue": "Fixture Journal [issn:1234-5678]",
+      "volume": "1"
+    },
+    {
+      "id": "doi:10.1234/c omid:br/3",
+      "title": "Common reference",
+      "author": "Carol Researcher [omid:ra/1]",
+      "pub_date": "2010",
+      "venue": "Fixture Journal [issn:1234-5678]",
+      "volume": "1"
+    }
+  ],
+  "edges": [
+    [
+      "a",
+      "c"
+    ],
+    [
+      "b",
+      "c"
+    ],
+    [
+      "b",
+      "a"
+    ]
+  ]
+}
